@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<title>LifeFit OS</title>
+<style>
+:root{--bg:#f7f7f8;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb;--accentbg:#dbeafe}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:900px;margin:auto;padding:14px}.row{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.grid{display:grid;gap:10px}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}.muted{color:var(--muted);font-size:.9rem}.metric{font-weight:700;margin-top:4px}
+nav{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:14px 0}button,select,input{font:inherit}button{min-height:44px;border:1px solid var(--border);border-radius:10px;background:#fff;padding:8px 10px}
+button.active,button.primary{background:var(--accentbg);border-color:var(--accent);font-weight:700}select,input{width:100%;min-height:44px;border:1px solid var(--border);border-radius:9px;padding:8px;background:#fff;color:var(--text)}
+label{display:block;margin:10px 0 4px}.check{display:flex;align-items:center;gap:10px;min-height:44px}.check input{width:20px;height:20px}.hidden{display:none}.workout{margin-top:8px}.workout.current{border-color:var(--accent);background:var(--accentbg)}
+@media(max-width:700px){.g4,.g2{grid-template-columns:1fr 1fr}nav{grid-template-columns:repeat(5,88px);overflow:auto}}@media(max-width:440px){.g4,.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row"><div><div class="muted">TODAY</div><h2 id="headline" style="margin:.2rem 0">Day 1 — Press / Chest</h2><div class="muted" id="subline">Train normally • Build phase</div></div><div class="card"><div class="muted">READINESS</div><div class="metric" id="readinessTop">Ready</div></div></div>
+<nav><button class="tab active" data-tab="today">Today</button><button class="tab" data-tab="training">Training</button><button class="tab" data-tab="nutrition">Nutrition</button><button class="tab" data-tab="recovery">Recovery</button><button class="tab" data-tab="progress">Progress</button></nav>
+
+<section id="today" class="panel">
+<div class="grid g4">
+<div class="card"><div class="muted">NEXT WORKOUT</div><div class="metric" id="nextWorkout">Day 1</div><div class="muted">Sequential, never missed</div></div>
+<div class="card"><div class="muted">CARDIO</div><div class="metric">10 min opportunity</div><div class="muted">No cardio debt</div></div>
+<div class="card"><div class="muted">CALORIES</div><div class="metric" id="dailyCalories">Not calibrated</div><div class="muted" id="weeklyCalories">Set in Nutrition</div></div>
+<div class="card"><div class="muted">SLEEP BASELINE</div><div class="metric">11 PM → 6 AM</div><div class="muted">~7 hours</div></div>
+</div>
+<div class="grid g2" style="margin-top:10px">
+<div class="card"><b>15-second check-in</b>
+<label>Energy</label><select id="energy"><option value="2">Good</option><option value="1">Okay</option><option value="0">Low</option></select>
+<label>Joints / soreness</label><select id="soreness"><option value="2">Good</option><option value="1">Moderate</option><option value="0">High</option></select>
+<label>Motivation</label><select id="motivation"><option value="2">Good</option><option value="1">Okay</option><option value="0">Low</option></select>
+<label>Extra activity</label><select id="activity"><option>Normal day</option><option>10+ min cardio</option><option>Long walk</option><option>Golf / range</option><option>Very active day</option></select>
+</div>
+<div class="card"><div class="muted">TODAY'S COACHING CALL</div><div class="metric" id="decision">Train normally</div><p class="muted" id="decisionDetail">Run the planned session and leave about 1–2 reps in reserve on demanding compound lifts.</p>
+<label class="check"><input id="didCardio" type="checkbox">10 minutes cardio / equivalent activity done</label>
+<label class="check"><input id="didMobility" type="checkbox">Mobility / sauna / recovery work</label>
+</div></div>
+</section>
+
+<section id="training" class="panel hidden">
+<div class="card"><div class="row"><div><div class="muted">SEQUENTIAL ROTATION</div><div class="metric" id="trainingCurrent">Day 1 — Press / Chest</div></div><button id="completeWorkout" class="primary">Complete & advance</button></div><p class="muted">No Monday–Sunday reset. The next session simply waits for you.</p></div>
+<div id="workoutGrid"></div>
+</section>
+
+<section id="nutrition" class="panel hidden">
+<div class="grid g2">
+<div class="card"><b>Current phase</b><label>Goal phase</label><select id="phase"><option>Build</option><option>Strength</option><option>Lean</option><option>Summer performance</option><option>Maintenance</option></select><label>Established daily calories</label><input id="establishedCalories" type="number" min="1200" max="6000" step="25" placeholder="e.g. 2600"></div>
+<div class="card"><b>Calorie Establishment Week</b><label>Proposed new daily average</label><input id="proposedCalories" type="number" min="1200" max="6000" step="25" placeholder="e.g. 2500"><button id="startEstablish" class="primary" style="margin-top:10px">Start 7-day transition</button><div class="muted" id="establishStatus" style="margin-top:10px">Not currently in a transition week.</div></div>
+</div>
+<div class="card" style="margin-top:10px"><b>Daily nutrition fundamentals</b>
+<div class="grid g4"><label class="check"><input class="foodcheck" type="checkbox">Protein</label><label class="check"><input class="foodcheck" type="checkbox">Fibre / plants</label><label class="check"><input class="foodcheck" type="checkbox">Hydration</label><label class="check"><input class="foodcheck" type="checkbox">Calories on plan</label></div><div class="muted" id="nutritionScore">0 of 4 fundamentals complete</div></div>
+</section>
+
+<section id="recovery" class="panel hidden">
+<div class="grid g4"><div class="card"><div class="muted">SLEEP</div><div class="metric">~7 h baseline</div></div><div class="card"><div class="muted">CARDIO</div><div class="metric">10 min when practical</div></div><div class="card"><div class="muted">GOLF / LIFE</div><div class="metric">Counts as activity</div></div><div class="card"><div class="muted">RECOVERY</div><div class="metric">Trend > one day</div></div></div>
+<div class="card" style="margin-top:10px"><b>Planned integrations</b><p class="muted"><b>Hevy Pro:</b> workouts, sets, reps and progression.<br><b>Amazfit / Zepp:</b> recovery/activity through Health Connect where supported.</p></div>
+</section>
+
+<section id="progress" class="panel hidden">
+<div class="grid g4"><div class="card"><div class="muted">BODYWEIGHT</div><input id="weight" type="number" step=".1" placeholder="lb"></div><div class="card"><div class="muted">WAIST</div><input id="waist" type="number" step=".1" placeholder="in"></div><div class="card"><div class="muted">BENCH MARKER</div><input id="bench" type="text" placeholder="e.g. 205×6"></div><div class="card"><div class="muted">SQUAT MARKER</div><input id="squat" type="text" placeholder="e.g. 245×8"></div></div>
+</section>
+</div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const workouts=[
+{name:'Day 1 — Press / Chest',short:'Day 1',items:['Barbell bench press','Incline dumbbell press','Pull-up / vertical pull','Single-arm cable row','Seated shoulder press','Cable lateral raise','Triceps']},
+{name:'Day 2 — Legs',short:'Day 2',items:['Back squat','Romanian deadlift','Leg extension','Leg curl','Calves','Core']},
+{name:'Day 3 — Pull / Back',short:'Day 3',items:['Pull-ups','Row variation','Single-arm lat pulldown','Face pull','Rear-delt cable fly','Barbell shrugs','Hammer / EZ-bar curl']},
+{name:'Day 4 — Athletic Strength',short:'Day 4',items:['Seasonal deadlift / hinge','Landmine press','Landmine rotation','Farmer carry','Dips','Pallof / rotational core','Short conditioning']}
+];
+const defaults={workoutIndex:0,phase:'Build',establishedCalories:'',proposedCalories:'',energy:'2',soreness:'2',motivation:'2',activity:'Normal day',didCardio:false,didMobility:false,foodchecks:[false,false,false,false],weight:'',waist:'',bench:'',squat:''};
+let state;try{state={...defaults,...JSON.parse(localStorage.getItem('lifefit-v1')||'{}')}}catch(e){state={...defaults}}
+const save=()=>localStorage.setItem('lifefit-v1',JSON.stringify(state));
+function renderWorkouts(){workoutGrid.innerHTML=workouts.map((w,i)=>`<div class="card workout ${i===state.workoutIndex?'current':''}"><b>${w.name}</b><div class="muted" style="margin-top:6px">${w.items.join(' • ')}</div></div>`).join('');trainingCurrent.textContent=workouts[state.workoutIndex].name;headline.textContent=workouts[state.workoutIndex].name;nextWorkout.textContent=workouts[state.workoutIndex].short}
+function readiness(){const score=+state.energy + +state.soreness + +state.motivation;let top='Ready',call='Train normally',detail='Run the planned session and leave about 1–2 reps in reserve on demanding compound lifts.';if(score<=2){top='Recovery priority';call='Reduce training stress';detail='Reduce load or sets and avoid grinding. Modify any movement that causes joint pain.'}else if(score<=4){top='Moderate';call='Train, autoregulate';detail='Do the planned workout, but leave roughly 2–3 reps in reserve on demanding lifts.'}readinessTop.textContent=top;decision.textContent=call;decisionDetail.textContent=detail;subline.textContent=call+' • '+state.phase+' phase'}
+function calories(){const v=Math.max(0,+state.establishedCalories||0);dailyCalories.textContent=v?v.toLocaleString()+' kcal':'Not calibrated';weeklyCalories.textContent=v?(v*7).toLocaleString()+' kcal/week':'Set in Nutrition'}
+function nutrition(){nutritionScore.textContent=state.foodchecks.filter(Boolean).length+' of 4 fundamentals complete'}
+$$('.tab').forEach(b=>b.addEventListener('click',()=>{$$('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.panel').forEach(p=>p.classList.add('hidden'));$('#'+b.dataset.tab).classList.remove('hidden')}));
+['energy','soreness','motivation','activity','phase','establishedCalories','proposedCalories','weight','waist','bench','squat'].forEach(id=>{const e=$('#'+id);e.value=state[id];e.addEventListener('change',()=>{state[id]=e.value;save();readiness();calories()});e.addEventListener('input',()=>{state[id]=e.value;save();calories()})});
+didCardio.checked=state.didCardio;didMobility.checked=state.didMobility;didCardio.onchange=()=>{state.didCardio=didCardio.checked;save()};didMobility.onchange=()=>{state.didMobility=didMobility.checked;save()};
+$$('.foodcheck').forEach((x,i)=>{x.checked=!!state.foodchecks[i];x.onchange=()=>{state.foodchecks[i]=x.checked;save();nutrition()}});
+completeWorkout.onclick=()=>{state.workoutIndex=(state.workoutIndex+1)%workouts.length;save();renderWorkouts()};
+startEstablish.onclick=()=>{const p=Math.max(0,+state.proposedCalories||0);establishStatus.textContent=p?`Transition active: target about ${p.toLocaleString()} kcal/day (${(p*7).toLocaleString()} kcal/week) for 7 days, then evaluate before locking it in.`:'Enter a proposed calorie average first.'};
+renderWorkouts();readiness();calories();nutrition();
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
