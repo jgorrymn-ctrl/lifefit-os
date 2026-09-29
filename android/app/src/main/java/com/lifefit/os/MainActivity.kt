@@ -1,28 +1,33 @@
 package com.lifefit.os
 
 import android.os.Bundle
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.BodyFatRecord
-import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
-import androidx.health.connect.client.records.RestingHeartRateRecord
-import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.*
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var hc: HealthConnectClient
+    private lateinit var healthConnectClient: HealthConnectClient
     private lateinit var repository: HealthConnectRepository
-    private lateinit var output: TextView
 
     private val permissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -34,150 +39,542 @@ class MainActivity : ComponentActivity() {
         HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     )
 
+    private var healthDataState by mutableStateOf<LifeFitHealthData?>(null)
+    private var healthMessageState by mutableStateOf("Loading Health Connect…")
+
     private val permissionLauncher =
         registerForActivityResult(
             PermissionController.createRequestPermissionResultContract()
         ) {
-            readHealth()
+            loadHealthData()
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 60, 40, 40)
-        }
-
-        val title = TextView(this).apply {
-            text = "LifeFit OS 1.2"
-            textSize = 28f
-        }
-
-        val sub = TextView(this).apply {
-            text =
-                "Health Connect proof-of-concept\nJason • Strong • Lean • Athletic • Healthy"
-            textSize = 16f
-            setPadding(0, 12, 0, 28)
-        }
-
-        val connect = Button(this).apply {
-            text = "Connect Health Connect"
-        }
-
-        val refresh = Button(this).apply {
-            text = "Refresh my data"
-        }
-
-        output = TextView(this).apply {
-            text = "No Health Connect data read yet."
-            textSize = 17f
-            setPadding(0, 30, 0, 0)
-        }
-
-        root.addView(title)
-        root.addView(sub)
-        root.addView(connect)
-        root.addView(refresh)
-        root.addView(output)
-
-        setContentView(root)
-
-        if (
+        val healthConnectAvailable =
             HealthConnectClient.getSdkStatus(this) ==
-            HealthConnectClient.SDK_AVAILABLE
-        ) {
-            hc = HealthConnectClient.getOrCreate(this)
+                    HealthConnectClient.SDK_AVAILABLE
 
-            repository = HealthConnectRepository(hc)
-
-            connect.setOnClickListener {
-                permissionLauncher.launch(permissions)
-            }
-
-            refresh.setOnClickListener {
-                readHealth()
-            }
+        if (healthConnectAvailable) {
+            healthConnectClient = HealthConnectClient.getOrCreate(this)
+            repository = HealthConnectRepository(healthConnectClient)
         } else {
-            output.text = "Health Connect is not available on this device."
-            connect.isEnabled = false
-            refresh.isEnabled = false
+            healthMessageState = "Health Connect is not available."
+        }
+
+        setContent {
+            LifeFitTheme {
+                LifeFitTodayScreen(
+                    data = healthDataState,
+                    healthMessage = healthMessageState,
+                    onConnect = {
+                        if (healthConnectAvailable) {
+                            permissionLauncher.launch(permissions)
+                        }
+                    },
+                    onRefresh = {
+                        if (healthConnectAvailable) {
+                            loadHealthData()
+                        }
+                    }
+                )
+            }
+        }
+
+        if (healthConnectAvailable) {
+            loadHealthData()
         }
     }
 
-    private fun readHealth() = lifecycleScope.launch {
-
-        val granted =
-            hc.permissionController.getGrantedPermissions()
-
-        if (!granted.containsAll(permissions)) {
-            output.text =
-                "LifeFit needs Health Connect read permission. Tap Connect Health Connect."
-            return@launch
-        }
-
+    private fun loadHealthData() = lifecycleScope.launch {
         try {
-            val data = repository.readHealthData()
+            val granted =
+                healthConnectClient.permissionController.getGrantedPermissions()
 
-            output.text = buildString {
-                appendLine("REAL HEALTH CONNECT DATA")
-                appendLine("Activity & recovery: last 7 days")
-                appendLine("Body measurements: latest within 30 days")
-                appendLine()
-
-                appendLine("Steps: ${data.steps}")
-
-                appendLine(
-                    "Weight: ${
-                        data.weightLb?.let {
-                            "%.1f lb".format(it)
-                        } ?: "—"
-                    }"
-                )
-
-                appendLine(
-                    "Body fat: ${
-                        data.bodyFatPercent?.let {
-                            "%.1f%%".format(it)
-                        } ?: "—"
-                    }"
-                )
-
-                appendLine(
-                    "Resting HR: ${
-                        data.restingHeartRate?.let {
-                            "$it bpm"
-                        } ?: "—"
-                    }"
-                )
-
-                appendLine(
-                    "HRV (RMSSD): ${
-                        data.hrvMs?.let {
-                            "%.0f ms".format(it)
-                        } ?: "—"
-                    }"
-                )
-
-                appendLine(
-                    "Sleep recorded: ${
-                        "%.1f h".format(data.sleepHours)
-                    }"
-                )
-
-                appendLine(
-                    "Exercise sessions: ${data.exerciseSessions}"
-                )
-
-                appendLine()
-                appendLine(
-                    "Milestone: Health Connect → LifeFit data layer is working."
-                )
+            if (!granted.containsAll(permissions)) {
+                healthMessageState = "Health Connect permission needed"
+                return@launch
             }
 
+            healthMessageState = "Health Connect connected"
+            healthDataState = repository.readHealthData()
+
         } catch (e: Exception) {
-            output.text =
-                "LifeFit couldn't read Health Connect data:\n${e.message}"
+            healthMessageState =
+                "Couldn't read Health Connect: ${e.message ?: "Unknown error"}"
         }
     }
 }
+
+@Composable
+fun LifeFitTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = lightColorScheme(
+            primary = LifeFitBlue,
+            secondary = LifeFitNavy,
+            background = LifeFitBackground,
+            surface = Color.White
+        ),
+        content = content
+    )
+}
+
+@Composable
+fun LifeFitTodayScreen(
+    data: LifeFitHealthData?,
+    healthMessage: String,
+    onConnect: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Scaffold(
+        containerColor = LifeFitBackground,
+        bottomBar = {
+            LifeFitBottomBar()
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { },
+                containerColor = LifeFitBlue,
+                contentColor = Color.White,
+                text = {
+                    Text(
+                        "LifeFit Coach",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            )
+        }
+    ) { padding ->
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+
+            LifeFitHeader()
+
+            ReadinessCard()
+
+            TrainingCard()
+
+            ActivityCard(data)
+
+            RecoveryCard(data)
+
+            BodyCard(data)
+
+            NutritionCard()
+
+            HealthConnectCard(
+                healthMessage = healthMessage,
+                onConnect = onConnect,
+                onRefresh = onRefresh
+            )
+
+            Spacer(modifier = Modifier.height(72.dp))
+        }
+    }
+}
+
+@Composable
+fun LifeFitHeader() {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "LifeFit",
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LifeFitNavy
+                )
+
+                Text(
+                    text = "TODAY",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LifeFitBlue
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.White
+            ) {
+                Text(
+                    text = "Jason  ▾",
+                    modifier = Modifier.padding(
+                        horizontal = 16.dp,
+                        vertical = 10.dp
+                    ),
+                    fontWeight = FontWeight.SemiBold,
+                    color = LifeFitNavy
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Strong • Lean • Athletic • Healthy",
+            fontSize = 15.sp,
+            color = LifeFitMuted
+        )
+    }
+}
+
+@Composable
+fun ReadinessCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = LifeFitNavy
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "READY",
+                color = LifeFitGreen,
+                fontSize = 25.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Text(
+                text = "Train normally today",
+                color = Color.White,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(
+                text = "LifeFit is beginning to learn your personal recovery baseline.",
+                color = Color(0xFFC8D5E8),
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun TrainingCard() {
+    LifeFitCard(
+        title = "TODAY'S TRAINING"
+    ) {
+        Text(
+            text = "Day 1 — Press / Chest",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = LifeFitNavy
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "Next in your 4 Day Routine",
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = { },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text(
+                text = "START WORKOUT",
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun ActivityCard(data: LifeFitHealthData?) {
+    LifeFitCard(
+        title = "ACTIVITY"
+    ) {
+        Text(
+            text = formatNumber(data?.steps),
+            fontSize = 27.sp,
+            fontWeight = FontWeight.Bold,
+            color = LifeFitNavy
+        )
+
+        Text(
+            text = "steps recorded • last 7 days",
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "${data?.exerciseSessions ?: "—"} exercise sessions recorded",
+            color = LifeFitBlue,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+fun RecoveryCard(data: LifeFitHealthData?) {
+    LifeFitCard(
+        title = "RECOVERY"
+    ) {
+
+        MetricRow(
+            label = "Sleep • 7 days",
+            value = data?.sleepHours?.let {
+                "%.1f h".format(it)
+            } ?: "—"
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 10.dp),
+            color = LifeFitDivider
+        )
+
+        MetricRow(
+            label = "Resting HR",
+            value = data?.restingHeartRate?.let {
+                "$it bpm"
+            } ?: "—"
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 10.dp),
+            color = LifeFitDivider
+        )
+
+        MetricRow(
+            label = "HRV • RMSSD",
+            value = data?.hrvMs?.let {
+                "%.0f ms".format(it)
+            } ?: "—"
+        )
+    }
+}
+
+@Composable
+fun BodyCard(data: LifeFitHealthData?) {
+    LifeFitCard(
+        title = "WEIGHT & BODY"
+    ) {
+
+        MetricRow(
+            label = "Latest weight",
+            value = data?.weightLb?.let {
+                "%.1f lb".format(it)
+            } ?: "—"
+        )
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 10.dp),
+            color = LifeFitDivider
+        )
+
+        MetricRow(
+            label = "Body fat",
+            value = data?.bodyFatPercent?.let {
+                "%.1f%%".format(it)
+            } ?: "—"
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Latest measurement available within 30 days",
+            color = LifeFitMuted,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+fun NutritionCard() {
+    LifeFitCard(
+        title = "NUTRITION"
+    ) {
+        Text(
+            text = "Learning Mode",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = LifeFitNavy
+        )
+
+        Spacer(modifier = Modifier.height(5.dp))
+
+        Text(
+            text = "LifeFit will learn your normal intake, recurring foods and habits before recommending calorie targets.",
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+    }
+}
+
+@Composable
+fun HealthConnectCard(
+    healthMessage: String,
+    onConnect: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    LifeFitCard(
+        title = "DATA CONNECTION"
+    ) {
+
+        Text(
+            text = healthMessage,
+            color = LifeFitMuted
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onConnect,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Connect")
+            }
+
+            Button(
+                onClick = onRefresh,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Refresh")
+            }
+        }
+    }
+}
+
+@Composable
+fun LifeFitCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+
+            Text(
+                text = title,
+                color = LifeFitBlue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            content()
+        }
+    }
+}
+
+@Composable
+fun MetricRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+
+        Text(
+            text = value,
+            color = LifeFitNavy,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun LifeFitBottomBar() {
+    NavigationBar(
+        containerColor = Color.White
+    ) {
+
+        NavigationBarItem(
+            selected = true,
+            onClick = { },
+            icon = { Text("●") },
+            label = { Text("Today") }
+        )
+
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Text("○") },
+            label = { Text("Training") }
+        )
+
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Text("○") },
+            label = { Text("Nutrition") }
+        )
+
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Text("○") },
+            label = { Text("Progress") }
+        )
+
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Text("○") },
+            label = { Text("More") }
+        )
+    }
+}
+
+private fun formatNumber(value: Long?): String {
+    if (value == null) return "—"
+
+    return "%,d".format(value)
+}
+
+private val LifeFitBlue = Color(0xFF1769E0)
+private val LifeFitNavy = Color(0xFF10284B)
+private val LifeFitBackground = Color(0xFFF3F6FA)
+private val LifeFitMuted = Color(0xFF65758B)
+private val LifeFitDivider = Color(0xFFE5EAF0)
+private val LifeFitGreen = Color(0xFF45D483)
