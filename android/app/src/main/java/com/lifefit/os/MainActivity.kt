@@ -276,7 +276,7 @@ fun TrainingCard() {
         title = "TODAY'S TRAINING"
     ) {
         Text(
-            text = "Day 1 — Press / Chest",
+            text = nextWorkout(lastCompletedDay = 3),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = LifeFitNavy
@@ -563,6 +563,18 @@ fun LifeFitBottomBar() {
             label = { Text("More") }
         )
     }
+}
+
+private val workoutRotation = listOf(
+    "Day 1 — Press / Chest",
+    "Day 2 — Legs",
+    "Day 3 — Pull / Back",
+    "Day 4 — Athletic / Full Body"
+)
+
+private fun nextWorkout(lastCompletedDay: Int): String {
+    val nextIndex = lastCompletedDay % workoutRotation.size
+    return workoutRotation[nextIndex]
 }
 
 private fun formatNumber(value: Long?): String {
