@@ -136,14 +136,13 @@ fun LifeFitTodayScreen(
             ExtendedFloatingActionButton(
                 onClick = { },
                 containerColor = LifeFitBlue,
-                contentColor = Color.White,
-                text = {
-                    Text(
-                        "LifeFit Coach",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            )
+                contentColor = Color.White
+            ) {
+                Text(
+                    text = "LifeFit Coach",
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     ) { padding ->
 
