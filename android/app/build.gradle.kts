@@ -37,6 +37,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     // Hevy API networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.activity:activity-ktx:1.10.0")
 
     // LifeFit Health Connect data layer

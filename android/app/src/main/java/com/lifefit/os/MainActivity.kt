@@ -28,6 +28,8 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var healthConnectClient: HealthConnectClient
     private lateinit var repository: HealthConnectRepository
+    private val hevyRepository = HevyRepository()
+    private var hevyConnectionInProgress by mutableStateOf(false)
 
     private val permissions = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
@@ -41,6 +43,10 @@ class MainActivity : ComponentActivity() {
 
     private var healthDataState by mutableStateOf<LifeFitHealthData?>(null)
     private var healthMessageState by mutableStateOf("Loading Health Connect…")
+    private var hevyNextWorkoutState by mutableStateOf<String?>(null)
+    private var hevyMessageState by mutableStateOf("Hevy not connected")
+    private var hevyApiKeyInput by mutableStateOf("")
+    private lateinit var hevyKeyStore: HevyKeyStore
 
     private val permissionLauncher =
         registerForActivityResult(
@@ -51,6 +57,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        hevyKeyStore = HevyKeyStore(this)
 
         val healthConnectAvailable =
             HealthConnectClient.getSdkStatus(this) ==
@@ -68,6 +76,16 @@ class MainActivity : ComponentActivity() {
                 LifeFitTodayScreen(
                     data = healthDataState,
                     healthMessage = healthMessageState,
+                    hevyNextWorkout = hevyNextWorkoutState,
+                    apiKeyInput = hevyApiKeyInput,
+                    onApiKeyChange = { hevyApiKeyInput = it },
+                    hevyStatus = hevyMessageState,
+                    onSaveHevyKey = {
+                        hevyKeyStore.saveApiKey(hevyApiKeyInput)
+                        hevyApiKeyInput = ""
+                        hevyMessageState = "Hevy API key saved securely"
+                        connectToHevy()
+                    },
                     onConnect = {
                         if (healthConnectAvailable) {
                             permissionLauncher.launch(permissions)
@@ -84,6 +102,10 @@ class MainActivity : ComponentActivity() {
 
         if (healthConnectAvailable) {
             loadHealthData()
+        }
+
+        if (!hevyKeyStore.getApiKey().isNullOrBlank()) {
+            connectToHevy()
         }
     }
 
@@ -105,6 +127,61 @@ class MainActivity : ComponentActivity() {
                 "Couldn't read Health Connect: ${e.message ?: "Unknown error"}"
         }
     }
+    private fun connectToHevy() = lifecycleScope.launch {
+        if (hevyConnectionInProgress) return@launch
+
+        val apiKey = hevyKeyStore.getApiKey()
+
+        if (apiKey.isNullOrBlank()) {
+            hevyMessageState = "Enter and save your Hevy API key"
+            return@launch
+        }
+
+        hevyConnectionInProgress = true
+        hevyMessageState = "Connecting to Hevy..."
+
+        try {
+            val response = hevyRepository.getWorkouts(apiKey)
+
+            val workouts = response.getJSONArray("workouts")
+            val lastCompletedRoutineId =
+                (0 until workouts.length())
+                    .map { workouts.getJSONObject(it) }
+                    .firstOrNull { workout ->
+                        workout.optString("routine_id") in setOf(
+                            "419297e3-c558-4a05-b161-f4fd61faa713",
+                            "c64e1497-4dfe-47f7-ad92-3c62bdfb3814",
+                            "32f6df2d-093a-448b-9399-0648d51cb0c3",
+                            "e3a5fd23-bc05-418c-8196-dde708c31f3e"
+                        )
+                    }
+                    ?.optString("routine_id")
+            val routineDays = listOf(
+                "419297e3-c558-4a05-b161-f4fd61faa713",
+                "c64e1497-4dfe-47f7-ad92-3c62bdfb3814",
+                "32f6df2d-093a-448b-9399-0648d51cb0c3",
+                "e3a5fd23-bc05-418c-8196-dde708c31f3e"
+            )
+
+            val lastCompletedIndex = routineDays.indexOf(lastCompletedRoutineId)
+
+            if (lastCompletedIndex >= 0) {
+                hevyNextWorkoutState = nextWorkout(lastCompletedIndex + 1)
+            } else {
+                hevyNextWorkoutState = null
+                hevyMessageState = "Hevy connected • No current routine found in recent workouts"
+            }
+
+            hevyMessageState =
+                "Hevy connected • ${workouts.length()} recent workouts retrieved"
+
+        } catch (e: Exception) {
+            hevyMessageState =
+                "Hevy connection failed: ${e.message ?: "Unknown error"}"
+        } finally {
+            hevyConnectionInProgress = false
+        }
+    }
 }
 
 @Composable
@@ -124,6 +201,11 @@ fun LifeFitTheme(content: @Composable () -> Unit) {
 fun LifeFitTodayScreen(
     data: LifeFitHealthData?,
     healthMessage: String,
+    hevyNextWorkout: String?,
+    apiKeyInput: String,
+    onApiKeyChange: (String) -> Unit,
+    hevyStatus: String,
+    onSaveHevyKey: () -> Unit,
     onConnect: () -> Unit,
     onRefresh: () -> Unit
 ) {
@@ -159,7 +241,7 @@ fun LifeFitTodayScreen(
 
             ReadinessCard()
 
-            TrainingCard()
+            TrainingCard(hevyNextWorkout = hevyNextWorkout)
 
             ActivityCard(data)
 
@@ -173,6 +255,13 @@ fun LifeFitTodayScreen(
                 healthMessage = healthMessage,
                 onConnect = onConnect,
                 onRefresh = onRefresh
+            )
+
+            HevyConnectionCard(
+                apiKeyInput = apiKeyInput,
+                onApiKeyChange = onApiKeyChange,
+                hevyStatus = hevyStatus,
+                onSaveKey = onSaveHevyKey
             )
 
             Spacer(modifier = Modifier.height(72.dp))
@@ -271,12 +360,12 @@ fun ReadinessCard() {
 }
 
 @Composable
-fun TrainingCard() {
+fun TrainingCard(hevyNextWorkout: String?) {
     LifeFitCard(
         title = "TODAY'S TRAINING"
     ) {
         Text(
-            text = nextWorkout(lastCompletedDay = 3),
+            text = hevyNextWorkout ?: nextWorkout(lastCompletedDay = 3),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = LifeFitNavy
@@ -428,7 +517,50 @@ fun NutritionCard() {
         )
     }
 }
+@Composable
+fun HevyConnectionCard(
+    apiKeyInput: String,
+    onApiKeyChange: (String) -> Unit,
+    hevyStatus: String,
+    onSaveKey: () -> Unit
+) {
+    LifeFitCard(title = "HEVY CONNECTION") {
 
+        Text(
+            text = "Connect your Hevy account to synchronize workouts and routines.",
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = apiKeyInput,
+            onValueChange = onApiKeyChange,
+            label = { Text("Hevy API Key") },
+            visualTransformation =
+                androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onSaveKey,
+            enabled = apiKeyInput.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("SAVE HEVY KEY")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = hevyStatus,
+            color = LifeFitMuted,
+            fontSize = 14.sp
+        )
+    }
+}
 @Composable
 fun HealthConnectCard(
     healthMessage: String,
