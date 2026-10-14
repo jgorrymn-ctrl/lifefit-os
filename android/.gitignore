@@ -6,3 +6,4 @@ app/build/
 local.properties
 *.iml
 gradle-daemon-jvm.properties
+*.hprof
